@@ -1,0 +1,731 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Hard font lock ────────────────────────────────────────────────────────
+   Every element on every screen and browser must use only Sora (display) or
+   PT Sans (body/mono). The wildcard rule fires before any component style,
+   browser default, or third-party stylesheet can override it.
+   ───────────────────────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  font-family: var(--font-body) !important;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display) !important;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Typography
+   ───────────────────────────────────────────────────────────────────────────
+
+   The three families are declared once here and nowhere else. Eleven files
+   previously spelled out their own stack: some referenced the next/font
+   variables with no fallback, some appended a different fallback chain, and
+   one named a literal family "Geist" that is never loaded, so every heading on
+   that page quietly fell back to the system sans serif.
+
+   `--font-display`, `--font-body`, and `--font-mono` are set as inline style on
+   <body> by the root layout, so they are available before first paint and
+   cannot shift layout when they resolve.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+@layer base {
+  html {
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: var(--font-body);
+    font-weight: 400;
+    /* Tightened tracking on body text. Sora and Geist both sit wide at the
+       default, and the previous per-page values ranged from -0.01em to
+       -0.03em with no rule about which applied where. */
+    letter-spacing: -0.011em;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    /* Display faces need tighter tracking than body faces to look right at
+       large sizes, and looser at small ones. One rule each, rather than a
+       value repeated per component. */
+    letter-spacing: -0.022em;
+    line-height: 1.15;
+    font-weight: 700;
+    text-wrap: balance;
+  }
+
+  h1 { font-size: clamp(2rem, 1.35rem + 2.6vw, 3.25rem); line-height: 1.08; }
+  h2 { font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2.125rem); }
+  h3 { font-size: clamp(1.2rem, 1.08rem + 0.5vw, 1.5rem); }
+  h4 { font-size: 1.125rem; letter-spacing: -0.015em; }
+  h5 { font-size: 1rem; letter-spacing: -0.01em; }
+  h6 {
+    font-size: 0.8125rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  p { line-height: 1.6; }
+
+  code, pre, kbd, samp {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+
+  /* Long, unbroken strings are the single most common source of horizontal
+     overflow on mobile: a long task title in a table cell, an unbroken URL in
+     a changelog entry, a model id in a log line. */
+  p, li, td, th, dd, dt, h1, h2, h3, h4, h5, h6 {
+    overflow-wrap: break-word;
+  }
+
+  button, input, select, textarea {
+    font-family: inherit;
+    font-size: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+  }
+
+  /* Buttons inherit the page's tight tracking, which makes labels sit oddly at
+     small sizes. One reset for every control. */
+  button { letter-spacing: -0.005em; }
+
+  img, svg, video, canvas {
+    max-width: 100%;
+  }
+
+  img, video {
+    height: auto;
+  }
+
+  table {
+    border-collapse: collapse;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Theme bridge
+   ───────────────────────────────────────────────────────────────────────────
+
+   The design tokens (--bg, --tx, --ac, and the rest) are emitted into the head
+   by the root layout as two `[data-theme]` blocks. This section only maps the
+   shadcn-style HSL names in `tailwind.config.ts` onto the same palette, so a
+   component written with `bg-background` and one written with `background:
+   var(--bg)` resolve to the same colour instead of to two different greys that
+   were both called "background".
+   ─────────────────────────────────────────────────────────────────────────── */
+
+@layer base {
+  :root {
+    color-scheme: light;
+
+    --background: 228 40% 97%;
+    --foreground: 240 51% 7%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 51% 7%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 51% 7%;
+    --primary: 234 68% 63%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 228 44% 95%;
+    --secondary-foreground: 240 51% 7%;
+    --muted: 228 44% 95%;
+    --muted-foreground: 236 27% 38%;
+    --accent: 228 44% 95%;
+    --accent-foreground: 240 51% 7%;
+    --destructive: 0 69% 39%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 228 30% 89%;
+    --input: 228 30% 89%;
+    --ring: 234 68% 63%;
+    --radius: 0.75rem;
+    --chart-1: 234 68% 63%;
+    --chart-2: 152 62% 36%;
+    --chart-3: 32 90% 45%;
+    --chart-4: 263 70% 62%;
+    --chart-5: 340 70% 50%;
+  }
+
+  [data-theme='dark'] {
+    color-scheme: dark;
+
+    --background: 240 24% 4%;
+    --foreground: 240 20% 90%;
+    --card: 240 20% 6%;
+    --card-foreground: 240 20% 90%;
+    --popover: 240 20% 6%;
+    --popover-foreground: 240 20% 90%;
+    --primary: 234 85% 68%;
+    --primary-foreground: 240 51% 7%;
+    --secondary: 240 16% 10%;
+    --secondary-foreground: 240 20% 90%;
+    --muted: 240 16% 10%;
+    --muted-foreground: 240 12% 61%;
+    --accent: 240 16% 10%;
+    --accent-foreground: 240 20% 90%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 14% 14%;
+    --input: 240 14% 14%;
+    --ring: 234 85% 68%;
+    --chart-1: 234 85% 68%;
+    --chart-2: 152 62% 45%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 263 70% 68%;
+    --chart-5: 340 80% 62%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  /* Focus styles for accessibility. A single ring token, so the visible focus
+     state is identical on a light card and a dark one. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
+
+  /* Hidden scrollbars, keeping scrolling fully functional. Firefox uses
+     `scrollbar-width`, WebKit uses `::-webkit-scrollbar`. Some page level
+     stylesheets restyle the scrollbar to a visible 3px thumb, which is a
+     deliberate difference, so those opt in explicitly. */
+  * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-thumb,
+  *::-webkit-scrollbar-corner {
+    display: none;
+    background: transparent;
+  }
+
+  html {
+    overflow-x: hidden;
+  }
+
+  html, body {
+    max-width: 100%;
+  }
+}
+
+@layer utilities {
+  /* Mobile-first responsive utilities */
+  .container-mobile {
+    @apply px-4 sm:px-5 md:px-6 lg:px-8;
+  }
+
+  .section-py {
+    @apply py-12 sm:py-16 md:py-20 lg:py-24;
+  }
+
+  .text-responsive-xs {
+    @apply text-xs sm:text-sm;
+  }
+
+  .text-responsive-sm {
+    @apply text-sm sm:text-base;
+  }
+
+  .text-responsive-base {
+    @apply text-base sm:text-lg;
+  }
+
+  .text-responsive-lg {
+    @apply text-lg sm:text-xl md:text-2xl;
+  }
+
+  .text-responsive-xl {
+    @apply text-xl sm:text-2xl md:text-3xl;
+  }
+
+  .text-responsive-2xl {
+    @apply text-2xl sm:text-3xl md:text-4xl;
+  }
+
+  .text-responsive-3xl {
+    @apply text-3xl sm:text-4xl md:text-5xl;
+  }
+
+  .gap-responsive {
+    @apply gap-3 sm:gap-4 md:gap-6;
+  }
+
+  .space-y-responsive > * + * {
+    @apply mt-3 sm:mt-4 md:mt-6;
+  }
+
+  .p-responsive {
+    @apply p-4 sm:p-6 md:p-8;
+  }
+
+  .card-responsive {
+    @apply p-4 sm:p-6 md:p-8 rounded-lg sm:rounded-xl;
+  }
+}
+
+@layer components {
+  .fast-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out;
+  }
+
+  /* A shared focus ring for components that manage their own focus styling, so
+     the ring does not have to be restated on every card and button. */
+  .focus-ring {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  /* Screen reader only, but focusable. Used by the skip link and by icon
+     buttons that carry their accessible name on an inner element. */
+  .sr-only-focusable {
+    @apply sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:shadow-lg;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Lenis smooth scroll
+   ───────────────────────────────────────────────────────────────────────────
+   Base rules from lenis/dist/lenis.css, kept inline so no build change is
+   needed. */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis:not(.lenis-autoToggle).lenis-stopped {
+  overflow: clip;
+}
+
+.lenis [data-lenis-prevent],
+.lenis [data-lenis-prevent-wheel],
+.lenis [data-lenis-prevent-touch],
+.lenis [data-lenis-prevent-vertical],
+.lenis [data-lenis-prevent-horizontal] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
+
+/* CSS smooth scrolling fights Lenis, Lenis drives the smoothing instead */
+html.lenis {
+  scroll-behavior: auto !important;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Motion
+   ───────────────────────────────────────────────────────────────────────────
+
+   The reduced motion block is hoisted to the top level rather than living
+   inside `@layer components`. A rule inside a layer loses to a Tailwind
+   utility that also sets animation duration, and every page here uses utility
+   classes for animation, so the previous placement meant reduced motion was
+   honoured only on elements that happened to use the custom classes.
+   ─────────────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================================
+   Legal pages (privacy and terms)
+
+   These rules used to live in a <style jsx> block inside LegalPages.tsx.
+   That block is not part of the server rendered HTML, so the browser painted
+   the policy as unstyled body text first and only snapped into the real layout
+   once hydration finished. Shipping the rules in this stylesheet means they
+   are in the first CSS payload, so the first paint is already correct.
+
+   Every selector is scoped under .legal-page so these generic names (topbar,
+   layout, section, toc) cannot leak into the rest of the app.
+   ========================================================================== */
+
+.legal-page {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--tx);
+  font-family: var(--font-body);
+}
+
+.legal-page .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  border-bottom: 1px solid var(--br);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.legal-page .topbar-inner {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.legal-page .back-btn,
+.legal-page .theme-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--bg2);
+  border: 1px solid var(--br);
+  color: var(--tx2);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.12s;
+  text-decoration: none;
+}
+
+.legal-page .back-btn {
+  padding: 7px 14px 7px 10px;
+}
+
+.legal-page .theme-btn {
+  gap: 6px;
+  padding: 7px 12px;
+}
+
+.legal-page .back-btn:hover,
+.legal-page .theme-btn:hover {
+  background: var(--bg3);
+  border-color: var(--brh);
+  color: var(--tx);
+}
+
+.legal-page .back-btn:hover {
+  transform: translateX(-2px);
+}
+
+.legal-page .back-btn:active {
+  transform: translateX(-1px);
+}
+
+.legal-page .back-btn:focus-visible,
+.legal-page .theme-btn:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+
+.legal-page .layout {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+
+.legal-page .page-header {
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--br);
+}
+
+.legal-page .page-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg2);
+  border: 1px solid var(--br);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tx3);
+  margin-bottom: 16px;
+}
+
+.legal-page h1 {
+  margin: 0 0 8px;
+  font-size: clamp(26px, 5vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+  color: var(--tx);
+}
+
+.legal-page .updated {
+  color: var(--tx3);
+  margin: 0;
+  font-size: 13px;
+}
+
+.legal-page .sections {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.legal-page .section {
+  border: 1px solid var(--br);
+  border-radius: 12px;
+  padding: 20px 22px 18px;
+  background: var(--bg1);
+  transition: border-color 0.15s;
+}
+
+.legal-page .section:hover {
+  border-color: var(--brh);
+}
+
+.legal-page .section h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tx);
+  letter-spacing: -0.01em;
+}
+
+.legal-page .section p {
+  margin: 0 0 8px;
+  line-height: 1.75;
+  color: var(--tx2);
+  font-size: 14px;
+}
+
+.legal-page .section p:last-child {
+  margin-bottom: 0;
+}
+
+.legal-page .section ul {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.legal-page .section li {
+  position: relative;
+  padding-left: 18px;
+  line-height: 1.7;
+  color: var(--tx2);
+  font-size: 14px;
+}
+
+.legal-page .section li::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 10px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ac);
+}
+
+/* The mailto link needs the accent colour. The global a{color:inherit} reset
+   in Tailwind's preflight would otherwise win by being injected later. */
+.legal-page .legal-mail {
+  color: var(--ac-text);
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+}
+
+/* Copy email button */
+.legal-page .copy-mail-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  background: var(--bg2);
+  border: 1px solid var(--br);
+  borderRadius: 8;
+  color: var(--ac-text);
+  fontSize: 13;
+  fontWeight: 500;
+  cursor: pointer;
+  transition: background 0.15s, borderColor 0.15s, color 0.15s;
+}
+.legal-page .copy-mail-btn:hover {
+  background: var(--bg3);
+  borderColor: var(--brh);
+  color: var(--tx);
+}
+.legal-page .copy-mail-btn:focus-visible {
+  outline: 2px solid var(--ac);
+  outlineOffset: 2;
+}
+.legal-page .copy-mail-btn svg {
+  width: 14;
+  height: 14;
+  marginRight: 6;
+  flexShrink: 0;
+}
+.legal-page .copy-mail-btn span {
+  whiteSpace: nowrap;
+  color: var(--tx2);
+  fontSize: 13;
+}
+
+/* Responsive: on narrow screens the button stays its size, the email text
+   simply wraps below it because the parent renderText flows as block-level. */
+@media (max-width: 600px) {
+  .legal-page .copy-mail-btn {
+    fontSize: 12;
+    padding: 5px 8px;
+  }
+  .legal-page .copy-mail-btn svg {
+    width: 12;
+    height: 12;
+  }
+}
+
+.legal-page .toc {
+  margin-top: 22px;
+  border: 1px solid var(--br);
+  border-radius: 12px;
+  padding: 16px 18px;
+  background: var(--bg1);
+}
+
+.legal-page .toc-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tx3);
+  margin: 0 0 12px;
+}
+
+.legal-page .toc ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 20px;
+  counter-reset: toc;
+}
+
+.legal-page .toc li {
+  counter-increment: toc;
+}
+
+.legal-page .toc a {
+  display: flex;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--tx2);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.legal-page .toc a::before {
+  content: counter(toc) '.';
+  color: var(--tx3);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.legal-page .toc a:hover {
+  color: var(--tx);
+}
+
+.legal-page .page-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: space-between;
+  margin-top: 26px;
+}
+
+.legal-page .page-switch a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--tx2);
+  text-decoration: none;
+  border: 1px solid var(--br);
+  border-radius: 10px;
+  padding: 8px 14px;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.legal-page .page-switch a:hover {
+  border-color: var(--brh);
+  color: var(--tx);
+}
+
+@media (max-width: 600px) {
+  .legal-page .topbar-inner {
+    padding: 0 16px;
+    height: 52px;
+  }
+  .legal-page .layout {
+    padding: 28px 16px 64px;
+  }
+  .legal-page .back-btn span {
+    display: none;
+  }
+  .legal-page .back-btn {
+    padding: 8px 10px;
+    border-radius: 9px;
+  }
+  .legal-page .section {
+    padding: 16px 16px 14px;
+    border-radius: 10px;
+  }
+  .legal-page .toc {
+    padding: 14px 16px;
+  }
+  .legal-page .toc ol {
+    grid-template-columns: 1fr;
+  }
+  .legal-page h1 {
+    font-size: clamp(22px, 6vw, 32px);
+  }
+}
+
+@media (max-width: 380px) {
+  .legal-page .layout {
+    padding: 20px 12px 56px;
+  }
+}

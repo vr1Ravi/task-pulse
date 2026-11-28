@@ -1,0 +1,124 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { z } from 'zod';
+import { logger } from '@/lib/logging/logger';
+import { rateLimit, rateLimitResponse, addRateLimitHeaders } from '@/lib/rate-limiter';
+import { cacheManager, CACHE_KEYS } from '@/lib/cache/cache-manager';
+
+const UpdateBoardSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  content: z.string().max(50000).optional(),
+  is_favorite: z.boolean().optional(),
+  // Accept all app-level category values — no constraint enforcement here,
+  // the DB column is now VARCHAR(50) with no CHECK constraint.
+  category: z.string().max(50).optional(),
+  icon: z.string().max(50).optional(),
+  folder: z.string().max(100).optional(),
+  input_text: z.string().max(50000).optional(),
+  output_text: z.string().max(50000).optional(),
+});
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const limitResult = await rateLimit(request, { maxRequests: 30, windowMs: 60000 });
+  if (!limitResult.success) return rateLimitResponse(limitResult.limit, limitResult.remaining, limitResult.reset);
+
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const { id } = await params;
+
+    const { error } = await supabase
+      .from('saved_generations')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id);
+
+    if (error) {
+      logger.error('Delete error:', { message: error.message });
+      return NextResponse.json(
+        { error: 'Failed to delete generation' },
+        { status: 500 }
+      );
+    }
+
+    cacheManager.invalidate(CACHE_KEYS.USAGE(user.id));
+    cacheManager.invalidate(CACHE_KEYS.ANALYTICS(user.id));
+    cacheManager.invalidate(CACHE_KEYS.TASK_STATS(user.id));
+
+    const response = NextResponse.json({ success: true });
+    return addRateLimitHeaders(response, limitResult.limit, limitResult.remaining, limitResult.reset);
+  } catch (error) {
+    logger.error('Delete generation error:', { error });
+    return NextResponse.json(
+      { error: 'Failed to delete generation' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const limitResult = await rateLimit(request, { maxRequests: 30, windowMs: 60000 });
+  if (!limitResult.success) return rateLimitResponse(limitResult.limit, limitResult.remaining, limitResult.reset);
+
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    const { id } = await params;
+    const body = await request.json();
+
+    const validation = UpdateBoardSchema.safeParse(body);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: 'Invalid fields', details: validation.error.issues },
+        { status: 400 }
+      );
+    }
+
+    const { data, error } = await supabase
+      .from('saved_generations')
+      .update(body)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select()
+      .single();
+
+    if (error) {
+      logger.error('Update error:', { message: error.message });
+      return NextResponse.json(
+        { error: 'Failed to update generation' },
+        { status: 500 }
+      );
+    }
+
+    const response = NextResponse.json(data);
+    return addRateLimitHeaders(response, limitResult.limit, limitResult.remaining, limitResult.reset);
+  } catch (error) {
+    logger.error('Update generation error:', { error });
+    return NextResponse.json(
+      { error: 'Failed to update generation' },
+      { status: 500 }
+    );
+  }
+}

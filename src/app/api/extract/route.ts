@@ -1,0 +1,174 @@
+import { createClient } from '@/lib/supabase/server'
+import { logger } from '@/lib/logging/logger'
+import { extractJsonArray, InferenceUnavailableError } from '@/lib/ai-service'
+import { complete, isInferenceConfigured } from '@/lib/ai/service'
+import { AiProviderError } from '@/lib/ai/provider'
+import { usageService } from '@/lib/services/usage-service'
+import { rateLimit, rateLimitResponse } from '@/lib/rate-limiter'
+import { AuthError, RateLimitError, ExternalServiceError, ValidationError } from '@/lib/errors/AppError'
+import { extractSchema } from '@/lib/validation/schemas'
+import { sanitizeInput } from '@/lib/security'
+import { getOrCreateDefaultBoard } from '@/lib/services/default-board'
+import DOMPurify from 'isomorphic-dompurify'
+import { NextRequest, NextResponse } from 'next/server'
+
+const VALID_PRIORITIES = new Set(['urgent', 'high', 'medium', 'low'])
+
+export async function POST(request: NextRequest): Promise<Response> {
+  const requestId = crypto.randomUUID()
+  const limitResult = await rateLimit(request, { maxRequests: 100, windowMs: 60000 })
+  if (!limitResult.success) return rateLimitResponse(limitResult.limit, limitResult.remaining, limitResult.reset)
+
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      const err = new AuthError()
+      return NextResponse.json(err.toJSON(), { status: 401 })
+    }
+
+    // Validated with a schema so the length limit lives in one definition rather
+    // than in an ad hoc check, and so a non-object body is rejected cleanly.
+    const parsed = extractSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) {
+      const err = new ValidationError(parsed.error.errors[0]?.message || 'Text is required')
+      return NextResponse.json(err.toJSON(), { status: err.statusCode })
+    }
+
+    logger.info('Extract request', { userId: user.id, requestId })
+
+    const canUse = await usageService.canUseAI(user.id)
+    if (!canUse) {
+      const err = new RateLimitError('Monthly AI usage limit reached. It resets next month.')
+      return NextResponse.json(err.toJSON(), { status: 429 })
+    }
+
+    const cleanInput = sanitizeInput(parsed.data.text, 8000)
+    if (!cleanInput) {
+      return NextResponse.json({ error: 'No usable text provided' }, { status: 400 })
+    }
+
+    // Reported as a configuration problem rather than a 502, because the
+    // difference decides whether the fix is in the environment or on the vendor.
+    if (!isInferenceConfigured()) {
+      return NextResponse.json(
+        {
+          error: 'AI extraction is not configured for this deployment',
+          code: 'AI_NOT_CONFIGURED',
+          statusCode: 503,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 503 },
+      )
+    }
+
+    const completion = await complete({
+      maxTokens: 1200,
+      temperature: 0.2,
+      messages: [
+        {
+          role: 'system',
+          content: `Extract every action item / task from the user's text.
+Return ONLY a valid JSON array. No markdown, no explanation, no extra text.
+Each item must have these exact fields:
+- "title": string (clear, actionable task name, max 120 chars)
+- "priority": one of "urgent" | "high" | "medium" | "low"
+- "estimate": string like "30m", "1h", "2h" (your best guess, or omit if unclear)
+- "deadline": ISO date string if mentioned, otherwise omit
+
+Rules:
+- Only extract real action items, not observations or facts
+- Merge duplicate tasks
+- Max 20 tasks per extraction
+
+Example output:
+[{"title":"Review client proposal","priority":"high","estimate":"1h"},{"title":"Send follow-up email","priority":"medium","estimate":"15m"}]`,
+        },
+        { role: 'user', content: cleanInput },
+      ],
+    })
+
+    const raw = completion.content
+    let tasks: unknown[] = extractJsonArray(raw)
+    if (tasks.length === 0) {
+      const obj = raw.match(/\{[\s\S]*\}/)
+      if (obj) {
+        try {
+          const parsed = JSON.parse(obj[0])
+          if (Array.isArray(parsed.tasks)) tasks = parsed.tasks
+        } catch {
+          tasks = []
+        }
+      }
+    }
+
+    await usageService.incrementAIUsage(user.id).catch((error) => {
+      logger.error('Failed to track AI usage', { userId: user.id, requestId, error: error.message })
+    })
+
+    const typedTasks = (tasks as { title?: string; priority?: string; estimate?: string; deadline?: string }[])
+      .filter(t => t.title && t.title.trim().length > 2)
+      .slice(0, 20)
+      .map(t => ({
+        ...t,
+        title: DOMPurify.sanitize(t.title!.trim().slice(0, 120), { ALLOWED_TAGS: [], ALLOWED_ATTR: [] }),
+      }))
+
+    const boardId = await getOrCreateDefaultBoard(supabase, user.id)
+
+    const taskRows = typedTasks.map(t => ({
+      board_id: boardId,
+      user_id: user.id,
+      title: t.title,
+      priority: VALID_PRIORITIES.has(t.priority ?? '') ? t.priority : 'medium',
+      label: 'General',
+      status: 'todo',
+      estimate: t.estimate ?? null,
+      due_date: t.deadline ?? null,
+    }))
+
+    if (taskRows.length > 0) {
+      const { error: insertError } = await supabase.from('tasks').insert(taskRows)
+      if (insertError) {
+        logger.error('Failed to save extracted tasks', { userId: user.id, requestId, error: insertError.message })
+        return NextResponse.json({ error: 'Failed to save extracted tasks' }, { status: 500 })
+      }
+    }
+
+    logger.info('Extract success', { userId: user.id, requestId, tasksCount: tasks.length })
+
+    return NextResponse.json({ tasks: typedTasks })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    logger.error('Extract error:', { error: message })
+
+    // A missing runtime is a 503 with an actionable message. A rate limit
+    // upstream is a 429 so the client can back off rather than treat it as a
+    // server fault. Everything else is genuinely upstream.
+    if (error instanceof InferenceUnavailableError) {
+      return NextResponse.json(
+        {
+          error: 'AI extraction is not configured for this deployment',
+          code: 'AI_NOT_CONFIGURED',
+          statusCode: 503,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 503 },
+      )
+    }
+    if (error instanceof AiProviderError && error.kind === 'rate_limited') {
+      return NextResponse.json(
+        {
+          error: 'The model is busy. Please try again shortly.',
+          code: 'AI_RATE_LIMITED',
+          statusCode: 429,
+          timestamp: new Date().toISOString(),
+        },
+        { status: 429, headers: error.retryAfterMs ? { 'Retry-After': String(Math.ceil(error.retryAfterMs / 1000)) } : undefined },
+      )
+    }
+
+    const serviceError = new ExternalServiceError(message)
+    return NextResponse.json(serviceError.toJSON(), { status: 502 })
+  }
+}
